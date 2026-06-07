@@ -13,11 +13,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FC2026',
+      title: 'FC2026 Pro',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.green,
-        scaffoldBackgroundColor: Colors.grey[100],
+        primarySwatch: Colors.indigo,
+        scaffoldBackgroundColor: Colors.grey[50],
       ),
       home: const HomeScreen(),
     );
@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
 }
 
 // ==========================================
-// SCREEN 1: HOME (TODAY'S FIXTURES & BUTTONS)
+// SCREEN 1: HOME (WORLD CUP FOCUS & TV BUTTONS)
 // ==========================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -35,89 +35,106 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String todayMatchesText = "Loading today's matches...";
-  final String apiToken = 'efd75b6e430f4c81a3472169e3418eb1'; // Your Token
+  String todayFixturesSummary = "Loading World Cup data...";
+  String fixtureDisplayDate = "";
+  final String apiToken = 'efd75b6e430f4c81a3472169e3418eb1';
 
   @override
   void initState() {
     super.initState();
-    fetchTodayMatches();
+    fetchWorldCupFixtures();
   }
 
-  Future<void> fetchTodayMatches() async {
-    final String todayDate = DateTime.now().toIso8601String().substring(0, 10);
+  Future<void> fetchWorldCupFixtures() async {
     const String url = 'https://api.football-data.org/v4/competitions/WC/matches';
-
     try {
       final response = await http.get(Uri.parse(url), headers: {'X-Auth-Token': apiToken});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final List matches = data['matches'];
-        String currentFixtures = "";
+        final List matches = data['matches'] ?? [];
+        
+        final String todayStr = DateTime.now().toIso8601String().substring(0, 10);
+        String runningText = "";
+        String foundDate = todayStr;
 
+        // 1. Look for today's matches
         for (var match in matches) {
-          if (match['utcDate'].toString().contains(todayDate)) {
+          if (match['utcDate'].toString().contains(todayStr)) {
             String home = match['homeTeam']['name'] ?? 'TBD';
             String away = match['awayTeam']['name'] ?? 'TBD';
-            String status = match['status'] == 'TIMED' ? 'Upcoming' : 'Live';
-            currentFixtures += "⚽ $home vs $away ($status)\n\n";
+            runningText += "⚽ $home vs $away\n\n";
+          }
+        }
+
+        // 2. If no matches today, find the next closest future match date
+        if (runningText.isEmpty) {
+          for (var match in matches) {
+            String matchDate = match['utcDate'].toString().substring(0, 10);
+            if (matchDate.compareTo(todayStr) > 0) {
+              foundDate = matchDate;
+              break;
+            }
+          }
+          
+          for (var match in matches) {
+            if (match['utcDate'].toString().contains(foundDate)) {
+              String home = match['homeTeam']['name'] ?? 'TBD';
+              String away = match['awayTeam']['name'] ?? 'TBD';
+              runningText += "⚽ $home vs $away\n\n";
+            }
           }
         }
 
         setState(() {
-          todayMatchesText = currentFixtures.isEmpty 
-              ? "No World Cup matches scheduled for today!" 
-              : currentFixtures.trim();
+          fixtureDisplayDate = foundDate;
+          todayFixturesSummary = runningText.isEmpty 
+              ? "No upcoming World Cup fixtures found." 
+              : runningText.trim();
         });
       } else {
-        setState(() => todayMatchesText = "Failed to synchronize with server.");
+        setState(() => todayFixturesSummary = "Error syncing with server.");
       }
     } catch (e) {
-      setState(() => todayMatchesText = "Connection error. Please verify network access.");
+      setState(() => todayFixturesSummary = "Network connection failed.");
     }
   }
 
   Future<void> _launchExternalUrl(String urlString) async {
     final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open external app for: $urlString')),
-      );
-    }
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('FC2026', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text('FC2026 Dashboard', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         centerTitle: true,
-        backgroundColor: Colors.green[800],
-        elevation: 2,
+        backgroundColor: Colors.indigo[900],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // Clickable Results Tab/Card Selector
+            // Dynamic Results Browser Trigger Card
             GestureDetector(
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ResultsScreen(apiToken: apiToken)),
+                  MaterialPageRoute(builder: (context) => CompetitionSelectorScreen(apiToken: apiToken)),
                 );
               },
               child: Card(
                 color: Colors.amber[800],
                 elevation: 4,
                 child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+                  padding: EdgeInsets.symmetric(vertical: 14.0, horizontal: 16.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.emoji_events, color: Colors.white),
+                      Icon(Icons.analytics, color: Colors.white),
                       SizedBox(width: 10),
-                      Text("👉 VIEW PREVIOUS MATCH RESULTS", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text("📊 BROWSE ALL COMPETITION RESULTS", style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -125,50 +142,68 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 15),
             
-            // Main Today's Fixture Showcase Window
+            // World Cup Smart Fixtures Showcase Panel
             Expanded(
-              child: Card(
-                elevation: 3,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text("Today's Match Schedules", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
-                      const Divider(height: 20, thickness: 1.5),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: Text(todayMatchesText, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, height: 1.4, fontWeight: FontWeight.w500)),
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => AllFixturesScreen(apiToken: apiToken)),
+                  );
+                },
+                child: Card(
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.star, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Text("World Cup Schedules ($fixtureDisplayDate)", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                          ],
                         ),
-                      ),
-                    ],
+                        const Divider(height: 20, thickness: 1.2),
+                        Expanded(
+                          child: Center(
+                            child: SingleChildScrollView(
+                              child: Text(todayFixturesSummary, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, height: 1.5, fontWeight: FontWeight.w600, color: Colors.black87)),
+                            ),
+                          ),
+                        ),
+                        const Text("👉 Tap card to view all upcoming schedules", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 15),
 
-            // Deep Integration Application Platform Routing Buttons
+            // Navigation Deep-link Action Suite
             ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], minimumSize: const Size.fromHeight(50)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], minimumSize: const Size.fromHeight(48)),
               onPressed: () => _launchExternalUrl('https://www.youtube.com/watch?v=ITx_k7uNFP4'),
               icon: const Icon(Icons.live_tv, color: Colors.white),
-              label: const Text('Watch Somoy TV Live', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              label: const Text('Watch Somoy TV Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 10),
             ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[800], minimumSize: const Size.fromHeight(50)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[800], minimumSize: const Size.fromHeight(48)),
               onPressed: () => _launchExternalUrl('https://www.btvlive.gov.bd/channel/BTV'),
               icon: const Icon(Icons.language, color: Colors.white),
-              label: const Text('Watch BTV Live (Browser)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              label: const Text('Watch BTV Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 10),
             ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], minimumSize: const Size.fromHeight(50)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], minimumSize: const Size.fromHeight(48)),
               onPressed: () => _launchExternalUrl('https://www.youtube.com/@TSportsLiveBangladesh'),
               icon: const Icon(Icons.play_circle_fill, color: Colors.white),
-              label: const Text('Watch T Sports Live', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              label: const Text('Watch T Sports Live', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -178,48 +213,131 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // ==========================================
-// SCREEN 2: RESULTS VIEW (HISTORICAL SCORES)
+// SCREEN 2: ALL UPCOMING WC FIXTURES LIST
 // ==========================================
-class ResultsScreen extends StatefulWidget {
+class AllFixturesScreen extends StatefulWidget {
   final String apiToken;
-  const ResultsScreen({Key? key, required this.apiToken}) : super(key: key);
+  const AllFixturesScreen({Key? key, required this.apiToken}) : super(key: key);
 
   @override
-  State<ResultsScreen> createState() => _ResultsScreenState();
+  State<AllFixturesScreen> createState() => _AllFixturesScreenState();
 }
 
-class _ResultsScreenState extends State<ResultsScreen> {
-  List completedMatches = [];
-  bool isLoading = true;
-  String errorMessage = "";
+class _AllFixturesScreenState extends State<AllFixturesScreen> {
+  List totalSchedules = [];
+  bool loading = true;
 
   @override
   void initState() {
     super.initState();
-    fetchPreviousResults();
+    loadSchedules();
   }
 
-  Future<void> fetchPreviousResults() async {
-    const String url = 'https://api.football-data.org/v4/competitions/WC/matches?status=FINISHED';
+  Future<void> loadSchedules() async {
+    const String url = 'https://api.football-data.org/v4/competitions/WC/matches';
+    try {
+      final response = await http.get(Uri.parse(url), headers: {'X-Auth-Token': widget.apiToken});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List rawMatches = data['matches'] ?? [];
+        final String rightNow = DateTime.now().toIso8601String().substring(0, 10);
+        
+        setState(() {
+          totalSchedules = rawMatches.where((m) => m['status'] == 'TIMED' || m['utcDate'].toString().substring(0, 10).compareTo(rightNow) >= 0).toList();
+          loading = false;
+        });
+      }
+    } catch (_) {
+      setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Full World Cup Schedules', style: TextStyle(color: Colors.white)), backgroundColor: Colors.indigo[900], iconTheme: const IconThemeData(color: Colors.white)),
+      body: loading 
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: totalSchedules.length,
+              itemBuilder: (context, index) {
+                final item = totalSchedules[index];
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.calendar_today, color: Colors.indigo),
+                    title: Text("${item['homeTeam']['name'] ?? 'TBD'} vs ${item['awayTeam']['name'] ?? 'TBD'}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text("Date: ${item['utcDate'].toString().substring(0, 10)} | Status: ${item['status']}"),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
+
+// ==========================================
+// SCREEN 3: RESULTS ENGINE WITH LEAGUE PICKER
+// ==========================================
+class CompetitionSelectorScreen extends StatefulWidget {
+  final String apiToken;
+  const CompetitionSelectorScreen({Key? key, required this.apiToken}) : super(key: key);
+
+  @override
+  State<CompetitionSelectorScreen> createState() => _CompetitionSelectorScreenState();
+}
+
+class _CompetitionSelectorScreenState extends State<CompetitionSelectorScreen> {
+  // Matched exactly with your specific subscription permissions mapping matrix
+  final Map<String, String> leagueDictionary = {
+    'WC': 'FIFA World Cup',
+    'CL': 'UEFA Champions League',
+    'BL1': 'Bundesliga',
+    'DED': 'Eredivisie',
+    'BSA': 'Campeonato Brasileiro Série A',
+    'PD': 'Primera Division',
+    'FL1': 'Ligue 1',
+    'ELC': 'Championship',
+    'PPL': 'Primeira Liga',
+    'EC': 'European Championship',
+    'SA': 'Serie A',
+    'PL': 'Premier League'
+  };
+
+  String activeCode = 'PL';
+  List historicalResults = [];
+  bool dataLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    refreshLeagueData(activeCode);
+  }
+
+  Future<void> refreshLeagueData(String code) async {
+    setState(() {
+      dataLoading = true;
+      activeCode = code;
+    });
+
+    final String url = 'https://api.football-data.org/v4/competitions/$code/matches?status=FINISHED';
     try {
       final response = await http.get(Uri.parse(url), headers: {'X-Auth-Token': widget.apiToken});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          completedMatches = data['matches'] ?? [];
-          isLoading = false;
+          List parsed = data['matches'] ?? [];
+          historicalResults = parsed.reversed.toList(); // Newest first
+          dataLoading = false;
         });
       } else {
         setState(() {
-          errorMessage = "Unable to fetch completed results matrix.";
-          isLoading = false;
+          historicalResults = [];
+          dataLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        errorMessage = "Network tracking failure.";
-        isLoading = false;
-      });
+    } catch (_) {
+      setState(() => dataLoading = false);
     }
   }
 
@@ -227,48 +345,84 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Match Results', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Results Explorer', style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.amber[800],
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-          : errorMessage.isNotEmpty
-              ? Center(child: Text(errorMessage, style: const TextStyle(fontSize: 16, color: Colors.red)))
-              : completedMatches.isEmpty
-                  ? const Center(child: Text("No completed matches recorded yet.", style: TextStyle(fontSize: 16)))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: completedMatches.length,
-                      itemBuilder: (context, index) {
-                        final match = completedMatches[index];
-                        final homeTeam = match['homeTeam']['name'] ?? 'Unknown';
-                        final awayTeam = match['awayTeam']['name'] ?? 'Unknown';
-                        final homeScore = match['score']['fullTime']['home'] ?? 0;
-                        final awayScore = match['score']['fullTime']['away'] ?? 0;
-                        final matchDate = match['utcDate'].toString().substring(0, 10);
+      body: Column(
+        children: [
+          // Dropdown Selector Control Panel Layer
+          Container(
+            padding: const EdgeInsets.all(14),
+            color: Colors.grey[200],
+            child: Row(
+              children: [
+                const Text("Select League: ", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButton<String>(
+                    value: activeCode,
+                    isExpanded: true,
+                    items: leagueDictionary.entries.map((e) {
+                      return DropdownMenuItem(value: e.key, child: Text(e.value));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) refreshLeagueData(val);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Historical Match Scoreboards Output Viewport
+          Expanded(
+            child: dataLoading
+                ? const Center(child: CircularProgressIndicator(color: Colors.amber))
+                : historicalResults.isEmpty
+                    ? const Center(child: Text("No finished matches found for this competition cycle."))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(10),
+                        itemCount: historicalResults.length,
+                        itemBuilder: (context, index) {
+                          final match = historicalResults[index];
+                          final hTeam = match['homeTeam']['name'] ?? 'Unknown';
+                          final aTeam = match['awayTeam']['name'] ?? 'Unknown';
+                          final hScore = match['score']['fullTime']['home'] ?? 0;
+                          final aScore = match['score']['fullTime']['away'] ?? 0;
+                          final mDate = match['utcDate'].toString().substring(0, 10);
+                          final matchday = match['matchday'] ?? '?';
 
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          elevation: 2,
-                          child: ListTile(
-                            leading: Text(matchDate, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                            title: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(child: Text(homeTeam, style: const TextStyle(fontWeight: FontWeight.bold))),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
-                                  child: Text("$homeScore - $awayScore", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                                ),
-                                Expanded(child: Text(awayTeam, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold))),
-                              ],
+                          return Card(
+                            elevation: 1.5,
+                            margin: const EdgeInsets.symmetric(vertical: 5),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                children: [
+                                  Text("Matchday $matchday — $mDate", style: TextStyle(color: Colors.grey[600], fontSize: 11, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(child: Text(hTeam, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                        decoration: BoxDecoration(color: Colors.indigo[50], borderRadius: BorderRadius.circular(5)),
+                                        child: Text("$hScore - $aScore", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                                      ),
+                                      Expanded(child: Text(aTeam, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }
