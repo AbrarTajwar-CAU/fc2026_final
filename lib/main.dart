@@ -168,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Row(
-                          mainAxisAlignment: Main => MainAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(Icons.star, color: Colors.blue),
                             const SizedBox(width: 8),
