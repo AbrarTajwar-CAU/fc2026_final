@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart'; // Handles clean localized hour formatting templates
 
 void main() {
   runApp(const MyApp());
@@ -57,30 +58,39 @@ class _HomeScreenState extends State<HomeScreen> {
         String runningText = "";
         String foundDate = todayStr;
 
-        // 1. Look for today's matches
+        // 1. Scan for games scheduled on the user's current calendar day
         for (var match in matches) {
-          if (match['utcDate'].toString().contains(todayStr)) {
+          DateTime localTime = DateTime.parse(match['utcDate']).toLocal();
+          String localMatchDay = localTime.toIso8601String().substring(0, 10);
+
+          if (localMatchDay == todayStr) {
             String home = match['homeTeam']['name'] ?? 'TBD';
             String away = match['awayTeam']['name'] ?? 'TBD';
-            runningText += "⚽ $home vs $away\n\n";
+            String formattedTime = DateFormat('hh:mm a').format(localTime);
+            runningText += "⚽ $home vs $away\n⏰ $formattedTime (Your Time)\n\n";
           }
         }
 
-        // 2. If no matches today, find the next closest future match date
+        // 2. Fallback: Search ahead chronologically for the next upcoming round date
         if (runningText.isEmpty) {
           for (var match in matches) {
-            String matchDate = match['utcDate'].toString().substring(0, 10);
-            if (matchDate.compareTo(todayStr) > 0) {
-              foundDate = matchDate;
+            DateTime localTime = DateTime.parse(match['utcDate']).toLocal();
+            String localMatchDay = localTime.toIso8601String().substring(0, 10);
+            if (localMatchDay.compareTo(todayStr) > 0) {
+              foundDate = localMatchDay;
               break;
             }
           }
           
           for (var match in matches) {
-            if (match['utcDate'].toString().contains(foundDate)) {
+            DateTime localTime = DateTime.parse(match['utcDate']).toLocal();
+            String localMatchDay = localTime.toIso8601String().substring(0, 10);
+
+            if (localMatchDay == foundDate) {
               String home = match['homeTeam']['name'] ?? 'TBD';
               String away = match['awayTeam']['name'] ?? 'TBD';
-              runningText += "⚽ $home vs $away\n\n";
+              String formattedTime = DateFormat('hh:mm a').format(localTime);
+              runningText += "⚽ $home vs $away\n⏰ $formattedTime (Your Time)\n\n";
             }
           }
         }
@@ -116,7 +126,6 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // Dynamic Results Browser Trigger Card
             GestureDetector(
               onTap: () {
                 Navigator.push(
@@ -142,7 +151,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 15),
             
-            // World Cup Smart Fixtures Showcase Panel
             Expanded(
               child: GestureDetector(
                 onTap: () {
@@ -160,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisAlignment: Main => MainAxisAlignment.center,
                           children: [
                             const Icon(Icons.star, color: Colors.blue),
                             const SizedBox(width: 8),
@@ -171,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Expanded(
                           child: Center(
                             child: SingleChildScrollView(
-                              child: Text(todayFixturesSummary, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, height: 1.5, fontWeight: FontWeight.w600, color: Colors.black87)),
+                              child: Text(todayFixturesSummary, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, height: 1.6, fontWeight: FontWeight.w600, color: Colors.black87)),
                             ),
                           ),
                         ),
@@ -184,7 +192,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 15),
 
-            // Navigation Deep-link Action Suite
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], minimumSize: const Size.fromHeight(48)),
               onPressed: () => _launchExternalUrl('https://www.youtube.com/watch?v=ITx_k7uNFP4'),
@@ -240,10 +247,13 @@ class _AllFixturesScreenState extends State<AllFixturesScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List rawMatches = data['matches'] ?? [];
-        final String rightNow = DateTime.now().toIso8601String().substring(0, 10);
+        final DateTime now = DateTime.now();
         
         setState(() {
-          totalSchedules = rawMatches.where((m) => m['status'] == 'TIMED' || m['utcDate'].toString().substring(0, 10).compareTo(rightNow) >= 0).toList();
+          totalSchedules = rawMatches.where((m) {
+            DateTime localTime = DateTime.parse(m['utcDate']).toLocal();
+            return m['status'] == 'TIMED' || localTime.isAfter(now);
+          }).toList();
           loading = false;
         });
       }
@@ -263,11 +273,15 @@ class _AllFixturesScreenState extends State<AllFixturesScreen> {
               itemCount: totalSchedules.length,
               itemBuilder: (context, index) {
                 final item = totalSchedules[index];
+                DateTime localTime = DateTime.parse(item['utcDate']).toLocal();
+                String displayDay = localTime.toIso8601String().substring(0, 10);
+                String displayTime = DateFormat('hh:mm a').format(localTime);
+
                 return Card(
                   child: ListTile(
-                    leading: const Icon(Icons.calendar_today, color: Colors.indigo),
+                    leading: const Icon(Icons.access_time_filled, color: Colors.indigo),
                     title: Text("${item['homeTeam']['name'] ?? 'TBD'} vs ${item['awayTeam']['name'] ?? 'TBD'}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("Date: ${item['utcDate'].toString().substring(0, 10)} | Status: ${item['status']}"),
+                    subtitle: Text("Date: $displayDay | Kickoff: $displayTime"),
                   ),
                 );
               },
@@ -288,7 +302,6 @@ class CompetitionSelectorScreen extends StatefulWidget {
 }
 
 class _CompetitionSelectorScreenState extends State<CompetitionSelectorScreen> {
-  // Matched exactly with your specific subscription permissions mapping matrix
   final Map<String, String> leagueDictionary = {
     'WC': 'FIFA World Cup',
     'CL': 'UEFA Champions League',
@@ -327,7 +340,7 @@ class _CompetitionSelectorScreenState extends State<CompetitionSelectorScreen> {
         final data = jsonDecode(response.body);
         setState(() {
           List parsed = data['matches'] ?? [];
-          historicalResults = parsed.reversed.toList(); // Newest first
+          historicalResults = parsed.reversed.toList();
           dataLoading = false;
         });
       } else {
@@ -351,7 +364,6 @@ class _CompetitionSelectorScreenState extends State<CompetitionSelectorScreen> {
       ),
       body: Column(
         children: [
-          // Dropdown Selector Control Panel Layer
           Container(
             padding: const EdgeInsets.all(14),
             color: Colors.grey[200],
@@ -374,8 +386,6 @@ class _CompetitionSelectorScreenState extends State<CompetitionSelectorScreen> {
               ],
             ),
           ),
-          
-          // Historical Match Scoreboards Output Viewport
           Expanded(
             child: dataLoading
                 ? const Center(child: CircularProgressIndicator(color: Colors.amber))
@@ -390,7 +400,9 @@ class _CompetitionSelectorScreenState extends State<CompetitionSelectorScreen> {
                           final aTeam = match['awayTeam']['name'] ?? 'Unknown';
                           final hScore = match['score']['fullTime']['home'] ?? 0;
                           final aScore = match['score']['fullTime']['away'] ?? 0;
-                          final mDate = match['utcDate'].toString().substring(0, 10);
+                          
+                          DateTime localTime = DateTime.parse(match['utcDate']).toLocal();
+                          String localDateStr = localTime.toIso8601String().substring(0, 10);
                           final matchday = match['matchday'] ?? '?';
 
                           return Card(
@@ -400,7 +412,7 @@ class _CompetitionSelectorScreenState extends State<CompetitionSelectorScreen> {
                               padding: const EdgeInsets.all(12.0),
                               child: Column(
                                 children: [
-                                  Text("Matchday $matchday — $mDate", style: TextStyle(color: Colors.grey[600], fontSize: 11, fontWeight: FontWeight.bold)),
+                                  Text("Matchday $matchday — $localDateStr", style: TextStyle(color: Colors.grey[600], fontSize: 11, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 8),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
