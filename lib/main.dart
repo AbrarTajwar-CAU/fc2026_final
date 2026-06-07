@@ -258,7 +258,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                               children: [
                                 Expanded(child: Text(homeTeam, style: const TextStyle(fontWeight: FontWeight.bold))),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, py: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
                                   child: Text("$homeScore - $awayScore", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                                 ),
