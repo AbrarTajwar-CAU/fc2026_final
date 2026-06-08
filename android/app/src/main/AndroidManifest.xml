@@ -7,10 +7,7 @@
         android:label="fc2026_final"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        xml:theme="@style/LaunchTheme"
-        android:usesCleartextTraffic="true">
-        
-        <activity
+        android:usesCleartextTraffic="true"> <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
